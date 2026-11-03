@@ -9,7 +9,8 @@
 //          헛스윙 + 포수가 받은 공 합쳐 3개 = 아웃 (안타를 쳐도 스트라이크는 그대로), 3아웃 = 공수교대,
 //          정한 회까지 하고 거리 합계로 승부
 import { SCREEN, FIELD, LEVELS, RULES, SIDE_COLORS, SIDE_LABELS, DISPLAY_LAG } from './config.js';
-import { Cam3, drawField, drawBall, drawBall3, drawZone, zoneRect, drawPitcher, drawBatter, batterPose, drawMitt, groundRing, fenceAt, text, rrect, INK, FONT } from './view3d.js';
+import { Cam3, drawField, drawBall, drawBall3, drawZone, zoneRect, drawPitcher, drawBatter, drawMitt, drawSprite, drawMittArt, groundRing, fenceAt, text, rrect, INK, FONT } from './view3d.js';
+import { ART, POSE, BPOSE, sheetFor, loadArt } from './art.js';
 
 const TAU = Math.PI * 2, D2R = Math.PI / 180;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -79,6 +80,7 @@ export class BaseballEngine {
     this.resize(SCREEN.W, SCREEN.H, true);
     this._frame = this._frame.bind(this);
     requestAnimationFrame(this._frame);
+    loadArt(() => { this._fieldCache = null; });   // 그림 파일이 있으면 바꿔 끼움 (없으면 코드 그림 그대로)
   }
 
   on(ev, fn) { (this.handlers[ev] ||= []).push(fn); }
@@ -907,7 +909,7 @@ export class BaseballEngine {
   _drawWorld(c) {
     const cam = this.cam, W = this.W, H = this.H;
     if (this.camMode === 'pitch') {
-      const key = `${W}x${H}x${this.camF}`;
+      const key = `${W}x${H}x${this.camF}x${ART.version}`;
       if (!this._fieldCache || this._fieldKey !== key) {
         const cv = this._fieldCache || document.createElement('canvas'); cv.width = W; cv.height = H;
         drawField(cv.getContext('2d'), cam, W, H);
@@ -926,12 +928,17 @@ export class BaseballEngine {
     }
     if (showPeople) {
       const side = P.cpu || this._isTouch(P) ? 1 : P.armSide;
-      drawPitcher(c, cam, { color: P.color, arm: A.arm, side, ball: A.ball && this.state !== 'change', lean: A.lean, t: this.time });
+      const sh = sheetFor('pitcher', P.type === 'kid');
+      // 그림이 있으면 그림 투수 (던지는 손은 그림 오른쪽 → 사람이 왼손이면 뒤집음), 없으면 코드로 그린 투수
+      if (!(sh && drawSprite(c, cam, sh, P.side, this._pitcherPose(P), [0, 0.27, FIELD.MOUND_Z - 0.1], P.type === 'kid' ? 1.4 : 1.85, side < 0)))
+        drawPitcher(c, cam, { color: P.color, arm: A.arm, side, ball: A.ball && this.state !== 'change', lean: A.lean, t: this.time });
     }
     if (b.mode === 'hit' || b.mode === 'roll' || b.mode === 'gone') this._drawHitBall(c);
     if (showPeople && this.camMode !== 'hit') {
       const sw = this.swingT >= 0 ? this.swingT / SWING_ANIM : -1;
-      drawBatter(c, cam, { color: B.color, batH: this.batH[B.side], swing: sw > 1 ? 1 : sw, num: String(B.side + 1) });
+      const sh = sheetFor('batter', B.type === 'kid');
+      if (!(sh && drawSprite(c, cam, sh, B.side, this._batterPose(sw), [-1.0, 0, 0.12], B.type === 'kid' ? 1.3 : 1.8, false, false)))
+        drawBatter(c, cam, { color: B.color, batH: this.batH[B.side], swing: sw > 1 ? 1 : sw, num: String(B.side + 1) });
     }
     if (this.camMode === 'pitch' && (this.state === 'windup' || this.state === 'pitch' || this.state === 'call')) {
       drawZone(c, cam, this.state === 'pitch' ? 0.75 : 0.5);
@@ -941,12 +948,27 @@ export class BaseballEngine {
     if (b.mode === 'pitch' || b.mode === 'caught') this._drawPitchBall(c);
   }
 
+  // 그림 투수 동작: 던지는 중/던진 뒤, 삼진 잡으면 기뻐하기, 홈런 맞으면 아쉬워하기, 준비 중엔 팔 높이 따라
+  _pitcherPose(P) {
+    const A = this.pAnim;
+    if (A.throwT >= 0) return A.throwT < 0.13 ? POSE.THROW : A.throwT < 0.9 ? POSE.FOLLOW : POSE.READY;
+    if (this.state === 'call' && this.game.strikes === 0) return POSE.HAPPY;          // 방금 삼진 아웃
+    if ((this.state === 'hit' && this.hit?.landed && this.hit.hr) || (this.camMode === 'back' && this.hit?.hr)) return POSE.SAD;
+    if (this.state === 'windup' && Math.sin(A.arm) < -0.55) return POSE.UP;           // 손이 어깨보다 위
+    return POSE.READY;
+  }
+  _batterPose(sw) {
+    if (this.state === 'call' && this.game.strikes === 0) return BPOSE.SAD;           // 방금 삼진
+    if (sw < 0) return BPOSE.READY;
+    return sw < 0.3 ? BPOSE.START : sw < 0.62 ? BPOSE.HIT : BPOSE.FOLLOW;
+  }
+
   _drawPitchBall(c) {
     const cam = this.cam, b = this.ball, pt = this.pitch, B = this.players[this.batSide];
     if (!pt) return;
     // 미트: 공이 가까워지면 나타남
     const near = b.z < 7 || pt.caught;
-    if (near) { c.save(); if (!pt.caught) c.globalAlpha = 0.85; drawMitt(c, cam, pt.tx, pt.ty - 0.02, FIELD.CATCH_Z - 0.05, this.mittPop); c.restore(); }
+    if (near) { c.save(); if (!pt.caught) c.globalAlpha = 0.85; if (!drawMittArt(c, cam, pt.tx, pt.ty - 0.02, FIELD.CATCH_Z - 0.05, this.mittPop)) drawMitt(c, cam, pt.tx, pt.ty - 0.02, FIELD.CATCH_Z - 0.05, this.mittPop); c.restore(); }
     // 🧒 어린이 타자 도움: 공이 올 곳에 동그라미, 공이 가까워질수록 작아짐 → 딱 맞을 때 휘두르기
     const left = (pt.tArr - performance.now()) / 1000, zp = cam.proj(pt.tx, pt.ty, 0);
     if (zp && LEVELS[B.type].assist && !pt.resolved && !pt.swung && left > -0.3) {

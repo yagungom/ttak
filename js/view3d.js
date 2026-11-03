@@ -1,6 +1,7 @@
 // 3D 보기 — 아주 단순한 원근 카메라 + 야구장·선수 그리기 (그림 파일 없이 전부 코드로)
 //  좌표(미터): x = 오른쪽(1루 쪽), y = 위, z = 앞(투수·외야 쪽). 홈플레이트가 (0, 0, 0)
 import { FIELD } from './config.js';
+import { ART } from './art.js';
 
 const TAU = Math.PI * 2;
 export const INK = '#2b2140';
@@ -82,10 +83,19 @@ export class Cam3 {
 const crowdPats = new WeakMap();
 let crowdCv = null;
 function crowdPattern(c) {
-  if (crowdPats.has(c)) return crowdPats.get(c);
-  if (!crowdCv) crowdCv = makeCrowd();
-  const pat = c.createPattern(crowdCv, 'repeat');
-  crowdPats.set(c, pat);
+  const v = ART.crowd ? 1 : 0, got = crowdPats.get(c);
+  if (got && got.v === v) return got.pat;
+  let pat;
+  if (ART.crowd) {
+    // 그림 관중: 1024px 타일을 작게 줄여서 반복
+    pat = c.createPattern(ART.crowd, 'repeat');
+    const k = 240 / ART.crowd.width;
+    try { pat.setTransform(new DOMMatrix().scale(k, k)); } catch { /* 오래된 브라우저: 원래 크기 */ }
+  } else {
+    if (!crowdCv) crowdCv = makeCrowd();
+    pat = c.createPattern(crowdCv, 'repeat');
+  }
+  crowdPats.set(c, { v, pat });
   return pat;
 }
 function makeCrowd() {
@@ -360,4 +370,26 @@ export function drawMitt(c, cam, x, y, z, pop = 0) {
 // 땅 위 동그라미 (떨어진 곳 표시)
 export function groundRing(c, cam, x, z, r, style, lw = 3) {
   if (cam.path(c, cam.disc(x, z, r, 0.03, 32))) { c.lineWidth = lw; c.strokeStyle = style; c.stroke(); }
+}
+
+// ── 그림(스프라이트) 선수: 발 위치(world)에 서 있게, 키(heightM)에 맞춰 크기 조절. flip = 좌우 뒤집기 ──
+export function drawSprite(c, cam, sheet, team, pose, [x, y, z], heightM, flip = false, shadow = true) {
+  const f = sheet?.teams[team]?.[pose] || sheet?.teams[team]?.[0];
+  if (!f) return false;
+  const q = cam.proj(x, y, z);
+  if (!q) return true;
+  const sc = heightM * q.k / sheet.stand;
+  if (shadow) { c.fillStyle = 'rgba(0,0,0,0.22)'; c.beginPath(); c.ellipse(q.x, q.y, 0.42 * q.k, 0.1 * q.k, 0, 0, TAU); c.fill(); }
+  c.save(); c.translate(q.x, q.y); if (flip) c.scale(-1, 1);
+  c.drawImage(f.cv, -f.fx * sc, -f.h * sc, f.w * sc, f.h * sc);
+  c.restore();
+  return true;
+}
+
+export function drawMittArt(c, cam, x, y, z, pop = 0) {
+  const m = ART.mitt, q = cam.proj(x, y, z);
+  if (!m || !q) return false;
+  const s = 0.44 * q.k * (1 + pop * 0.12) / Math.max(m.w, m.h);
+  c.drawImage(m.cv, q.x - m.w * s / 2, q.y - m.h * s / 2 + 0.02 * q.k, m.w * s, m.h * s);
+  return true;
 }
