@@ -1,0 +1,15 @@
+{
+  "name": "딱! 홈런",
+  "short_name": "딱홈런",
+  "description": "한 손으로 던지고 한 손으로 치는 가족 야구 게임. 날아간 거리가 그대로 점수!",
+  "lang": "ko",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "background_color": "#14284b",
+  "theme_color": "#14284b",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

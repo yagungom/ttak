@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#14284b">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="딱! 홈런">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="한 손으로 던지고 한 손으로 치는 가족 야구 게임. 날아간 거리가 그대로 점수!">
+  <title>딱! 홈런</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="game" width="1280" height="720" aria-label="게임 화면"></canvas>
+
+    <div id="ui">
+      <!-- 시작: 화면 왼쪽 = 왼쪽 선수, 오른쪽 = 오른쪽 선수 (서는 자리 그대로) -->
+      <section id="scr-title" class="screen">
+        <button type="button" class="btn btn-sm fs-btn fs-title" data-fs aria-label="전체화면"></button>
+        <div class="tn-setup">
+          <div class="logo tn-logo">
+            <h1><span class="l1">딱!</span><span class="l2">홈런</span></h1>
+            <p class="tagline"><b>한 손</b>으로 던지고 <b>한 손</b>으로 쳐요 · 날아간 거리가 점수!</p>
+          </div>
+          <div class="tn-cards">
+            <div class="card tn-player p0">
+              <div class="tn-side">⬅ 왼쪽 선수 <small>먼저 공격</small></div>
+              <input id="name0" class="tn-name" maxlength="6" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="1P" aria-label="왼쪽 선수 이름" enterkeyhint="done">
+              <div class="seg seg-col" data-side="0" role="radiogroup" aria-label="왼쪽 선수 종류">
+                <button type="button" class="seg-btn" data-type="adult" role="radio">🧑 어른<small>빠른 공 · 진짜처럼</small></button>
+                <button type="button" class="seg-btn" data-type="kid" role="radio">🧒 어린이<small>느린 공 · 쉽게 맞음</small></button>
+                <button type="button" class="seg-btn cpu-only" data-type="cpu" role="radio">🤖 컴퓨터<small>혼자 할 때</small></button>
+              </div>
+            </div>
+            <div class="card tn-mid">
+              <div class="seg" id="play-row" role="radiogroup" aria-label="플레이 방식">
+                <button type="button" class="seg-btn" data-play="camera" role="radio">📺 카메라<small>둘이 몸으로 · TV</small></button>
+                <button type="button" class="seg-btn" data-play="touch" role="radio">📱 폰<small>손가락 · 혼자도 OK</small></button>
+              </div>
+              <div class="lbl">몇 회까지 할까요?</div>
+              <div class="seg seg-sm seg3" id="inn-row" role="radiogroup" aria-label="이닝 수">
+                <button type="button" class="seg-btn" data-inn="1" role="radio">1회</button>
+                <button type="button" class="seg-btn" data-inn="2" role="radio">2회</button>
+                <button type="button" class="seg-btn" data-inn="3" role="radio">3회</button>
+              </div>
+              <div class="lbl" id="facing-lbl">카메라</div>
+              <div class="seg seg-sm" id="facing-row" role="radiogroup" aria-label="카메라">
+                <button type="button" class="seg-btn" data-facing="environment" role="radio">📷 후면</button>
+                <button type="button" class="seg-btn" data-facing="user" role="radio">🤳 전면</button>
+              </div>
+              <button type="button" class="btn btn-primary btn-big" id="btn-start">플레이 볼!</button>
+              <div class="row">
+                <button type="button" class="btn btn-sm" id="btn-help">❓ 하는 법</button>
+                <button type="button" class="btn btn-sm" id="btn-settings">⚙️ 설정</button>
+              </div>
+            </div>
+            <div class="card tn-player p1">
+              <div class="tn-side">오른쪽 선수 ➡</div>
+              <input id="name1" class="tn-name" maxlength="6" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="2P" aria-label="오른쪽 선수 이름" enterkeyhint="done">
+              <div class="seg seg-col" data-side="1" role="radiogroup" aria-label="오른쪽 선수 종류">
+                <button type="button" class="seg-btn" data-type="adult" role="radio">🧑 어른<small>빠른 공 · 진짜처럼</small></button>
+                <button type="button" class="seg-btn" data-type="kid" role="radio">🧒 어린이<small>느린 공 · 쉽게 맞음</small></button>
+                <button type="button" class="seg-btn cpu-only" data-type="cpu" role="radio">🤖 컴퓨터<small>혼자 할 때</small></button>
+              </div>
+            </div>
+          </div>
+          <p class="privacy tn-privacy">🔒 카메라 영상은 이 기기 안에서만 처리돼요. 저장도 전송도 하지 않아요.</p>
+        </div>
+      </section>
+
+      <!-- 불러오는 중 -->
+      <section id="scr-loading" class="screen dim">
+        <div class="card center-card">
+          <div class="spinner" aria-hidden="true"></div>
+          <div id="loading-text" class="loading-text">준비 중…</div>
+          <button type="button" class="btn btn-sm" id="btn-cancel-load">취소</button>
+        </div>
+      </section>
+
+      <!-- 카메라 오류 -->
+      <section id="scr-camerr" class="screen dim">
+        <div class="card center-card">
+          <div class="big-emoji">📷</div>
+          <h2 id="camerr-title">카메라를 켤 수 없어요</h2>
+          <p id="camerr-text" class="muted"></p>
+          <div class="row">
+            <button type="button" class="btn btn-primary" id="btn-cam-retry">다시 시도</button>
+            <button type="button" class="btn" id="btn-cam-home">처음으로</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 대기실: 각자 자기 쪽 공을 손으로 톡 -->
+      <section id="scr-lobby" class="screen passthrough">
+        <div class="tn-toast" id="cam-toast" hidden></div>
+        <div class="corner-controls left">
+          <button type="button" class="btn btn-round fs-btn" data-fs aria-label="전체화면"></button>
+          <button type="button" class="btn btn-pill btn-sm" id="btn-cam-switch">📷 카메라 바꾸기</button>
+          <button type="button" class="btn btn-round" id="btn-lobby-home" title="처음으로" aria-label="처음으로">✕</button>
+        </div>
+        <div class="corner-controls right">
+          <button type="button" class="btn btn-primary btn-pill" id="btn-go">▶ 바로 시작</button>
+        </div>
+      </section>
+
+      <section id="scr-play" class="screen passthrough">
+        <div class="corner-controls right">
+          <button type="button" class="btn btn-round fs-btn" data-fs aria-label="전체화면"></button>
+          <button type="button" class="btn btn-round" id="btn-pause" title="일시정지" aria-label="일시정지">⏸</button>
+        </div>
+      </section>
+
+      <section id="scr-pause" class="screen dim">
+        <div class="card center-card">
+          <h2>잠깐 쉬어요 ☕</h2>
+          <div class="row">
+            <button type="button" class="btn btn-primary btn-big" id="btn-resume">계속하기</button>
+            <button type="button" class="btn" id="btn-quit">그만하기</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 결과: 화면 아래 작은 카드 (공을 톡 치면 바로 한 판 더) -->
+      <section id="scr-result" class="screen passthrough">
+        <div class="card tn-result">
+          <div class="tn-res-title" id="res-title"></div>
+          <div class="tn-res-score"><span id="res-name0"></span><b id="res-score"></b><span id="res-name1"></span></div>
+          <div class="tn-res-stats" id="res-stats"></div>
+          <div class="row">
+            <button type="button" class="btn btn-primary" id="btn-retry">한 판 더!</button>
+            <button type="button" class="btn" id="btn-home">처음으로</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 하는 법 -->
+      <section id="scr-help" class="screen dim">
+        <div class="card help-card">
+          <h2>이렇게 놀아요 ⚾</h2>
+          <ol class="help-list">
+            <li><b>📺 카메라 모드 (둘이)</b> 폰을 <b>가로</b>로 세워 TV에 미러링하고, 두 사람이 나란히 2~3걸음 뒤에 서요. 화면 <b>왼쪽 반</b>에 한 명, <b>오른쪽 반</b>에 한 명! 대기실에서 자기 앞 공을 <b>톡 친 손</b>이 던지고 치는 손이 돼요 (다른 손은 안 봐요).</li>
+            <li><b>🧢 던지기</b> 그 손으로 팔을 <b>휙</b> 휘둘러요. 빠르게 휘두를수록 빠른 공! 휘두르는 <b>방향(왼쪽·오른쪽)</b>과 <b>손 높이(높게·낮게)</b>로 공이 들어오는 곳이 바뀌어요. 공은 언제나 스트라이크존 안으로 들어가요.</li>
+            <li><b>⚾ 치기</b> 공이 홈에 올 때 맞춰 손을 <b>휙</b>! 세게 휘두를수록 멀리 가요. 일찍 치면 왼쪽(당겨치기), 늦게 치면 오른쪽(밀어치기). 어른은 손 높이도 공 높이에 맞춰야 멀리 가요 (낮으면 뜬공, 높으면 땅볼).</li>
+            <li><b>📏 점수</b> 수비는 없어요. 친 공은 무조건 안쪽으로 날아가고, <b>날아간 거리(m)</b>가 그대로 점수! 정한 회가 끝나면 거리 합계가 많은 쪽이 이겨요.</li>
+            <li><b>❌ 아웃</b> 헛스윙이나 안 친 공(포수가 받은 공)이 합쳐서 <b>3개</b>면 아웃, <b>3아웃</b>이면 공수교대. 안타를 쳐도 스트라이크는 그대로라서, 3개가 될 때까지 계속 쳐서 거리를 모아요.</li>
+            <li><b>🧒 어린이</b> 공이 느리게 오고, 동그라미가 작아질 때 휘두르면 돼요. 높이는 거의 상관없어요. 던질 때도 대충 던져도 가운데로 들어가요.</li>
+            <li><b>📱 폰 모드</b> 던질 곳을 손가락으로 누르고 <b>휙</b> 쓸면 던져요 (빠를수록 빠른 공). 공이 오면 공 높이를 <b>톡</b>(옆으로 휙 쓸면 더 세게). 혼자면 상대는 🤖 컴퓨터, 둘이면 화면 왼쪽 반 / 오른쪽 반을 각자 써요.</li>
+            <li><b>🙈 잠깐!</b> 카메라 모드에서 한 사람이라도 안 보이면 자동으로 멈추고, 다시 서면 이어서 해요.</li>
+          </ol>
+          <button type="button" class="btn btn-primary" id="help-back">알았어요!</button>
+        </div>
+      </section>
+
+      <!-- 설정 -->
+      <section id="scr-settings" class="screen dim">
+        <div class="card settings-card">
+          <h2>⚙️ 설정</h2>
+          <div class="set-row"><label for="set-mirror">거울처럼 좌우 반전</label><input type="checkbox" id="set-mirror" class="toggle"></div>
+          <div class="set-row"><label for="set-sfx">효과음</label><input type="checkbox" id="set-sfx" class="toggle"></div>
+          <div class="set-row"><label for="set-bgm">배경음악</label><input type="checkbox" id="set-bgm" class="toggle"></div>
+          <div class="set-row"><label for="set-lag">타이밍 보정 <small>(TV가 늦게 보이면 크게)</small></label><select id="set-lag"></select></div>
+          <div class="set-row"><label for="set-quality">인식 화질</label><select id="set-quality"></select></div>
+          <div class="set-row"><label for="set-debug">성능 정보 표시</label><input type="checkbox" id="set-debug" class="toggle"></div>
+          <div class="row"><button type="button" class="btn btn-primary" id="settings-back">닫기</button></div>
+          <p class="privacy small">🔒 카메라 영상: 이 기기에서만 처리, 저장·전송 없음 · 이름·설정은 이 기기에만 저장 · 서버로 보내는 정보 없음</p>
+        </div>
+      </section>
+
+      <!-- 전체화면 안내 (아이폰 등 버튼이 안 되는 환경) -->
+      <section id="scr-fsguide" class="screen dim">
+        <div class="card help-card">
+          <h2 id="fsguide-title">전체화면</h2>
+          <p id="fsguide-note" class="muted fs-note"></p>
+          <ol id="fsguide-steps" class="help-list"></ol>
+          <button type="button" class="btn btn-primary" id="fsguide-close">알았어요!</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="rotate-hint" hidden>
+    <div class="rotate-card">
+      <div class="big-emoji">📱↻</div>
+      <p>두 사람이 나란히 서야 해서<br>폰을 <b>가로</b>로 돌려 주세요</p>
+      <div class="rotate-btns">
+        <button type="button" class="btn btn-sm" id="rotate-dismiss">그냥 할게요</button>
+      </div>
+    </div>
+  </div>
+  <noscript>이 게임은 자바스크립트가 필요해요.</noscript>
+</body>
+</html>
