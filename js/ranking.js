@@ -30,7 +30,8 @@ export function buildBoard(rows, kind, myScore = null) {
   const binMap = new Map();
   for (const r of rows) { const b = Math.floor(sc(r) / step); binMap.set(b, (binMap.get(b) || 0) + 1); }
   const bins = [...binMap.entries()].sort((a, b) => a[0] - b[0]).map(([b, c]) => ({ b, c }));
-  const top = sorted.slice(0, 10).map((r, i) => ({ rank: i + 1, team: r.team, player: r.player, score: sc(r), total: r.total, best: r.best, hits: r.hits, homers: r.homers, innings: r.innings, at: r.ts }));
+  // 순위 = 나보다 높은 기록 수 + 1 (같은 점수는 공동 순위 — 온라인 랭킹·'내 순위'와 같은 기준)
+  const top = sorted.slice(0, 10).map((r) => ({ rank: sorted.findIndex((x) => sc(x) === sc(r)) + 1, team: r.team, player: r.player, score: sc(r), total: r.total, best: r.best, hits: r.hits, homers: r.homers, innings: r.innings, at: r.ts }));
   const myRank = myScore == null ? null : sorted.filter((r) => sc(r) > myScore).length + 1;
   return { total: rows.length, step, max, top, bins, my_rank: myRank };
 }
