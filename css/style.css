@@ -204,18 +204,20 @@ body[data-play="camera"] .cpu-only { display: none; }
 .set-row label small { font-weight: 700; color: var(--muted); font-size: 0.8em; }
 
 /* ── 📱 세로 화면(폰 모드): 카드를 위아래로 쌓고 스크롤 ── */
-@container (orientation: portrait) {
+@container (max-aspect-ratio: 4/5) {
   #ui { --u: min(2.4cqw, 1.2cqh); --v: calc(var(--u) * 1); font-size: calc(1.9 * var(--u)); }
   #scr-title { align-items: stretch; overflow: auto; padding-top: calc(7 * var(--u)); }
   .tn-setup { height: auto; min-height: 100%; grid-template-rows: auto auto auto; }
-  .tn-cards { grid-template-columns: 1fr; gap: calc(1.4 * var(--u)); align-items: stretch; }
-  .tn-mid { order: -1; }
+  .tn-cards { grid-template-columns: 1fr 1fr; gap: calc(1.2 * var(--u)); align-items: stretch; }
+  .tn-mid { order: -1; grid-column: 1 / -1; }
   .tn-cards { min-height: auto; }
   .tn-cards > .card, .tn-player, .tn-mid { max-height: none; overflow: visible; min-height: auto; }
   .tn-player .seg-col .seg-btn small { display: none; }
   .tagline { font-size: 1em; }
-  .tn-player .seg-col { grid-template-columns: repeat(3, 1fr); }
-  .tn-player .seg-col .seg-btn { flex-direction: column; justify-content: center; padding: 0.45em 0.2em; }
+  .tn-player { padding: calc(1.2 * var(--u)) calc(1.2 * var(--u)); }
+  .tn-player .seg-col { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; gap: calc(0.5 * var(--u)); }
+  .tn-player .seg-col .seg-btn { flex-direction: column; justify-content: center; gap: 0.1em; padding: 0.35em 0.1em; font-size: 0.88em; line-height: 1.2; word-break: keep-all; text-align: center; }
+  .tn-side small { display: block; margin: 0; }
   .tn-logo h1 { font-size: 3.6em; }
   .corner-controls { bottom: calc(2.2 * var(--u)); }
   .tn-result { min-width: 0; width: 100%; }
@@ -278,9 +280,34 @@ body[data-play="camera"] .cpu-only { display: none; }
 .board-empty .sub { color: var(--muted); font-size: 0.8em; }
 .board-note { color: var(--muted); font-weight: 800; font-size: 0.85em; text-align: center; padding: 0.6em; }
 .set-row b { font-weight: 900; }
-@container (orientation: portrait) {
+@container (max-aspect-ratio: 4/5) {
   .board-body { grid-template-columns: 1fr; grid-template-rows: auto auto; }
   .rank-card { height: auto; }
   .rank-top { flex-wrap: wrap; }
   #scr-ranking { align-items: stretch; overflow: auto; }
+}
+
+/* 시작 화면 오른쪽 위 구석 버튼 (랭킹·하는 법·설정) */
+.title-corner { position: absolute; top: calc(2.2 * var(--v)); right: calc(2 * var(--u)); z-index: 2; display: flex; gap: calc(0.6 * var(--u)); }
+.title-corner .btn { background: rgba(255,255,255,0.9); }
+/* 카메라 고르기: 글자와 버튼을 한 줄에 */
+.facing-wrap { display: flex; align-items: center; gap: calc(0.8 * var(--u)); }
+.facing-wrap[hidden] { display: none; }
+.facing-wrap .lbl { margin-top: 0; white-space: nowrap; }
+.facing-wrap .seg { flex: 1; }
+/* 팀 이름 오류 줄: 오류가 없을 땐 자리 차지 안 함 */
+.err:empty { min-height: 0; margin: 0; }
+@container (max-aspect-ratio: 4/5) {
+  .title-corner { top: calc(1.6 * var(--u)); right: calc(1.6 * var(--u)); }
+  .title-corner .btn { font-size: 1em; padding: 0.4em 0.55em; }
+  .title-corner .t { display: none; }            /* 좁은 세로 화면: 아이콘만 */
+  .fs-title .fs-label { display: none; }
+  .fs-title { top: calc(1.6 * var(--u)); left: calc(1.6 * var(--u)); }
+  #scr-title { padding-top: calc(5.6 * var(--u)); }
+  .tn-logo h1 { font-size: 3.1em; }
+  .tn-logo .tagline { font-size: 0.85em; margin-top: 0.2em; }
+}
+/* 폴드 펼침처럼 거의 정사각형인 세로 화면: 가로와 같은 3칸, 글씨는 폭에 맞춤 */
+@container (orientation: portrait) and (min-aspect-ratio: 4/5) {
+  #ui { --u: 1.15cqw; --v: calc(var(--u) * 0.75); }
 }

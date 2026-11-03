@@ -26,6 +26,12 @@
       <!-- 시작: 화면 왼쪽 = 왼쪽 선수, 오른쪽 = 오른쪽 선수 (서는 자리 그대로) -->
       <section id="scr-title" class="screen">
         <button type="button" class="btn btn-sm fs-btn fs-title" data-fs aria-label="전체화면"></button>
+        <!-- 오른쪽 위 구석: 랭킹·하는 법·설정 (가운데 카드가 넘치지 않게 따로 뺌) -->
+        <div class="title-corner">
+          <button type="button" class="btn btn-sm" id="btn-rank" aria-label="랭킹">🏆<span class="t"> 랭킹</span></button>
+          <button type="button" class="btn btn-sm" id="btn-help" aria-label="하는 법">❓<span class="t"> 하는 법</span></button>
+          <button type="button" class="btn btn-sm" id="btn-settings" aria-label="설정">⚙️<span class="t"> 설정</span></button>
+        </div>
         <div class="tn-setup">
           <div class="logo tn-logo">
             <h1><span class="l1">딱!</span><span class="l2">홈런</span></h1>
@@ -55,17 +61,14 @@
               <label for="team" class="lbl">🏆 팀 이름 <small>(랭킹용 · 실명 대신 별명)</small></label>
               <input id="team" class="tn-name tn-team" maxlength="12" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="예: 튼튼이네 가족" aria-describedby="team-err" enterkeyhint="done">
               <div id="team-err" class="err" aria-live="polite"></div>
+              <div class="facing-wrap" id="facing-wrap">
               <div class="lbl" id="facing-lbl">카메라</div>
               <div class="seg seg-sm" id="facing-row" role="radiogroup" aria-label="카메라">
                 <button type="button" class="seg-btn" data-facing="environment" role="radio">📷 후면</button>
                 <button type="button" class="seg-btn" data-facing="user" role="radio">🤳 전면</button>
               </div>
-              <button type="button" class="btn btn-primary btn-big" id="btn-start">플레이 볼!</button>
-              <div class="row">
-                <button type="button" class="btn btn-sm" id="btn-rank">🏆 랭킹</button>
-                <button type="button" class="btn btn-sm" id="btn-help">❓ 하는 법</button>
-                <button type="button" class="btn btn-sm" id="btn-settings">⚙️ 설정</button>
               </div>
+              <button type="button" class="btn btn-primary btn-big" id="btn-start">플레이 볼!</button>
             </div>
             <div class="card tn-player p1">
               <div class="tn-side">오른쪽 선수 ➡</div>

@@ -69,7 +69,7 @@ function renderSetup() {
   $$('#play-row .seg-btn').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.play === settings.play)));
   $$('#facing-row .seg-btn').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.facing === settings.facing)));
   const cam = needsCamera();
-  $('#facing-row').hidden = !cam; $('#facing-lbl').hidden = !cam;
+  $('#facing-wrap').hidden = !cam;
   $('#btn-start').textContent = hasHuman() ? '플레이 볼!' : '🤖 컴퓨터끼리 구경하기';
   applyLayout();
 }
