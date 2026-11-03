@@ -303,47 +303,65 @@ export class BaseballEngine {
     return clamp(ZONE.top - rel * (ZONE.top - ZONE.bottom), 0.15, 1.55);
   }
 
+  // 던지기·스윙 알아보기 (사람마다 정한 한 손만)
+  //  · 던지기: 손을 머리(어깨) 위로 들었다가 → 앞·아래로 빠르게 내려오는 동작만 (위로 올리는·옆으로 흔드는 동작은 무시)
+  //  · 스윙:   몸 바깥쪽에 있던 손이 → 몸 가운데 쪽으로 옆으로 빠르게 들어오는 동작만 (손을 뒤로 빼는 준비 동작은 무시)
   _gestures(p, now) {
     if (p.hand == null || this.frozen) { p.cap = null; return; }
-    const h = p.hands[p.hand], lv = LEVELS[p.type];
+    const h = p.hands[p.hand], lv = LEVELS[p.type], b = p.body, kid = p.type === 'kid';
     if (!h.on) return;
+    // 손이 어깨선보다 위에 있었던 마지막 시각 (던질 준비)
+    if (h.ry < b.shY - b.scale * (kid ? 0.0 : 0.12)) p.raisedAt = now;
     const throwing = p.side === this.pitSide && this.state === 'windup' && this.stateT > 0.7;
     const batting = p.side === this.batSide && this.state === 'pitch' && this.pitch && !this.pitch.swung;
     if (!throwing && !batting) { p.cap = null; return; }
-    const min = throwing ? lv.throwMin : lv.swingMin;
     const v = Math.hypot(h.vx, h.vy) || 1;
     let cap = p.cap;
     if (!cap) {
-      // 던지기는 위로 올리는 동작(준비 자세)은 빼고, 내리거나 옆으로 휘두를 때만
-      if (h.sp > min && (!throwing || h.vy > -0.35 * v)) {
-        cap = p.cap = { kind: throwing ? 'throw' : 'swing', t0: now, peak: h.sp, peakT: now, pts: [{ x: h.rx, y: h.ry }] };
-        const prev = h.hist[h.hist.length - 2]; if (prev) cap.pts.unshift({ x: prev.x, y: prev.y });
+      const prev = h.hist[h.hist.length - 2] || { x: h.rx, y: h.ry };
+      if (throwing) {
+        const raised = now - (p.raisedAt ?? -1e9) < (kid ? 1600 : 1200);
+        const down = h.vy > (kid ? 0.4 : 0.55) * v;                       // 위에서 아래로
+        const high = prev.y < b.shY + b.scale * (kid ? 0.6 : 0.4);        // 내려오기 시작한 곳이 어깨 근처보다 위
+        if (h.sp > lv.throwMin && raised && down && high) cap = { kind: 'throw' };
+      } else {
+        const ox = prev.x - b.x;                                          // 시작할 때 손이 몸 가운데에서 떨어진 정도
+        const side = Math.abs(h.vx) > (kid ? 0.45 : 0.6) * v;             // 옆으로 휘두름
+        const inward = Math.sign(h.vx) === -Math.sign(ox);                // 바깥 → 안쪽
+        const outside = Math.abs(ox) > b.scale * (kid ? 0.25 : 0.35);     // 몸 바깥쪽에서 시작
+        if (h.sp > lv.swingMin && side && inward && outside) cap = { kind: 'swing' };
+      }
+      if (cap) {
+        Object.assign(cap, { t0: now, peak: h.sp, peakT: now, pts: [{ x: prev.x, y: prev.y }, { x: h.rx, y: h.ry }] });
+        p.cap = cap;
       }
       return;
     }
     cap.pts.push({ x: h.rx, y: h.ry });
     if (h.sp > cap.peak) { cap.peak = h.sp; cap.peakT = now; }
-    const limit = cap.kind === 'throw' ? 120 : 90;
-    if (now - cap.t0 >= limit || h.sp < cap.peak * 0.5) {
+    const limit = cap.kind === 'throw' ? 170 : 90;
+    const stopped = cap.kind === 'throw' ? h.vy < 0 : false;             // 던지는 팔이 내려가다 멈추면 끝
+    if (now - cap.t0 >= limit || h.sp < cap.peak * 0.45 || stopped) {
       p.cap = null;
       if (cap.kind === 'throw') this._camThrow(p, cap);
       else {
-        const ys = cap.pts.map((q) => q.y).sort((a, b) => a - b), ym = ys[Math.floor(ys.length / 2)];
+        const ys = cap.pts.map((q) => q.y).sort((x, y) => x - y), ym = ys[Math.floor(ys.length / 2)];
         this._swing(p.side, { tDetect: cap.peakT, power: clamp((cap.peak - lv.swingMin) / (lv.swingMax - lv.swingMin), 0, 1), batH: this._handBatH(p, ym) });
       }
     }
   }
 
-  // 카메라로 던진 공: 빠르기 = 구속 / 휘두른 방향(좌우) + 손 높이(위아래) = 들어오는 곳
+  // 카메라로 던진 공: 빠르기 = 구속
+  //  좌우: 팔을 내리는 방향 (보통 던지면 몸 쪽으로 살짝 비스듬히 내려와서 그만큼은 가운데로 봐 줌)
+  //  위아래: 팔이 멈춘 높이 (가슴에서 멈추면 높은 공, 배꼽쯤이면 가운데, 끝까지 내리면 낮은 공)
   _camThrow(p, cap) {
-    const lv = LEVELS[p.type], a = cap.pts[0], b = cap.pts[cap.pts.length - 1];
-    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
-    const cy = cap.pts.reduce((s, q) => s + q.y, 0) / cap.pts.length;
-    const rel = (cy - p.body.shY) / Math.max(30, p.body.hipY - p.body.shY);
+    const lv = LEVELS[p.type], a = cap.pts[0], e = cap.pts[cap.pts.length - 1];
+    const dx = e.x - a.x, dy = e.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const relEnd = (e.y - p.body.shY) / Math.max(30, p.body.hipY - p.body.shY);
     this._throw(p.side, {
       power: clamp((cap.peak - lv.throwMin) / (lv.throwMax - lv.throwMin), 0, 1),
-      lx: clamp(dx / len * 1.35, -1.3, 1.3),
-      ly: clamp(-(rel - 0.1) * 2.2, -1.3, 1.3),
+      lx: clamp((dx / len + p.armSide * 0.2) * 1.6, -1.3, 1.3),
+      ly: clamp((0.7 - relEnd) * 2.2, -1.3, 1.3),
     });
   }
 
@@ -377,7 +395,7 @@ export class BaseballEngine {
 
   _startMatch() {
     for (const p of this.players) {
-      Object.assign(p, { score: 0, hits: 0, hrs: 0, longest: 0, ks: 0, cap: null });
+      Object.assign(p, { score: 0, hits: 0, hrs: 0, longest: 0, ks: 0, cap: null, log: [] });
       if (p.hand == null) this._pickHand(p);
     }
     this.game = { inning: 1, half: 0, outs: 0, strikes: 0, atBat: 1 };
@@ -500,7 +518,7 @@ export class BaseballEngine {
     const aF = Math.max(alpha, 4) * D2R;
     let D = 0.75 * ev * ev * Math.sin(2 * aF) / FIELD.GRAVITY;
     if (alpha < 4) D *= 0.6;                                    // 땅볼
-    D = Math.max(2.5, D);
+    D = clamp(D, 2.5, FIELD.MAX_DIST);
     const th = clamp((-en * 28 + pt.lx * 9 + randn() * 5), -FIELD.FAIR_DEG, FIELD.FAIR_DEG) * D2R;
     // 공이 지금 있는 곳에서 출발 (이미 미트에 들어갔으면 홈플레이트 위)
     const b = this.ball;
@@ -587,7 +605,7 @@ export class BaseballEngine {
     const h = this.hit, B = this.players[h.side], O = this.players[1 - h.side];
     h.landed = true; h.landT = 0;
     const behind = B.score <= O.score;
-    B.score += h.D; B.hits++; B.longest = Math.max(B.longest, h.D);
+    B.score += h.D; B.hits++; B.longest = Math.max(B.longest, h.D); (B.log ||= []).push(h.D);   // 친 공 거리 목록 (랭킹 서버가 다시 계산할 때 씀)
     if (h.hr) B.hrs++;
     // 안타를 쳐도 스트라이크는 그대로 (RULES.RESET_ON_HIT 로 바꿀 수 있음) → 반 이닝 길이가 일정
     if (RULES.RESET_ON_HIT) { this.game.strikes = 0; this.game.atBat++; }
@@ -639,6 +657,8 @@ export class BaseballEngine {
     this.emit('over', {
       winner: w, names: this.players.map((p) => p.name), scores: this.players.map((p) => p.score),
       longest: this.players.map((p) => p.longest), hrs: this.players.map((p) => p.hrs), hits: this.players.map((p) => p.hits),
+      players: this.players.map((p) => ({ side: p.side, name: p.name, type: p.type, cpu: p.cpu, total: p.score, best: p.longest, hits: p.hits, homers: p.hrs, log: [...(p.log || [])] })),
+      innings: this.innings, input: this.touchMode ? 'touch' : 'camera',
     });
   }
 
@@ -763,9 +783,9 @@ export class BaseballEngine {
       const k = clamp(this.hit.t / 0.5, 0, 1);
       // 공을 따라가되 땅도 같이 보이게: 공보다 조금 아래를 보고, 공이 높이 뜰수록 카메라도 올라감
       P = [lerp(PITCH_CAM.p[0], b.x * 0.15, k), lerp(PITCH_CAM.p[1], 3 + clamp(b.y * 0.7, 0, 22) + Math.min(dist * 0.06, 6), k), lerp(PITCH_CAM.p[2], -8 - Math.min(dist * 0.08, 9), k)];
-      T = [b.x, Math.max(b.y * 0.8 - 1, 0.3), Math.max(b.z, 6)];
+      T = [b.x, Math.max(b.y * 0.95, 0.3), Math.max(b.z, 6)];   // 공이 화면 가운데쯤 (위쪽 점수판에 안 가리게)
       F = this.camF * (1 + clamp((dist - 15) / 90, 0, 1.1));
-      const r = 1 - Math.exp(-dt * (this.hit.landed ? 2.5 : 7));
+      const r = 1 - Math.exp(-dt * (this.hit.landed ? 2.5 : 10));
       c.p = c.p.map((v, i) => lerp(v, P[i], r)); c.t = c.t.map((v, i) => lerp(v, T[i], r)); c.F = lerp(c.F, F, r);
     } else {
       const r = 1 - Math.exp(-dt * 6);
@@ -897,7 +917,7 @@ export class BaseballEngine {
     if (this.flash > 0) { c.fillStyle = `rgba(255,255,240,${this.flash * 0.35})`; c.fillRect(0, 0, W, H); }
     this._drawFx(c);
     if (this.state !== 'idle' && !this.demo) {
-      if (this.input && !this.touchMode) this._drawPips(c);
+      if (this.input && !this.touchMode && this.state !== 'hit') this._drawPips(c);   // 친 공이 날아가는 동안엔 작은 창 숨김
       this._drawHud(c);
       this._drawGuide(c);
     }
@@ -1124,7 +1144,10 @@ export class BaseballEngine {
         const hs = hd.hist.slice(-8);
         c.lineCap = 'round';
         for (let i = 1; i < hs.length; i++) { c.strokeStyle = `rgba(255,217,61,${i / hs.length * 0.8})`; c.lineWidth = 6 * i / hs.length + 1; c.beginPath(); c.moveTo(sx(hs[i - 1].x), sy(hs[i - 1].y)); c.lineTo(sx(hs[i].x), sy(hs[i].y)); c.stroke(); }
-        c.beginPath(); c.arc(sx(hd.x), sy(hd.y), 11, 0, TAU); c.fillStyle = '#ffd93d'; c.fill(); c.lineWidth = 3; c.strokeStyle = INK; c.stroke();
+        // 투수가 손을 머리 위로 들면 초록색 = 던질 준비 OK
+        const ready = role === 'pit' && this.state === 'windup' && performance.now() - (p.raisedAt ?? -1e9) < 1200;
+        c.beginPath(); c.arc(sx(hd.x), sy(hd.y), ready ? 14 : 11, 0, TAU); c.fillStyle = ready ? '#3ecf6b' : '#ffd93d'; c.fill(); c.lineWidth = 3; c.strokeStyle = INK; c.stroke();
+        if (ready) text(c, '준비 OK', x + w / 2, y + 22, { size: 20, color: '#3ecf6b', sw: 5 });
       }
       c.restore();
       rrect(c, x, y, w, h, 16); c.lineWidth = active ? 6 + Math.sin(this.time * 8) * 2 : 4; c.strokeStyle = active ? '#ffd93d' : p.color; c.stroke();
@@ -1172,12 +1195,12 @@ export class BaseballEngine {
     let msg = '';
     if (this.state === 'windup' && !P.cpu) {
       if (this._isTouch(P)) msg = this._humans().length > 1 ? `🧢 ${P.name}: 던질 곳 판을 누르고 휙 쓸어요!` : `🧢 던질 곳을 누르고 휙 쓸어요! (빠를수록 빠른 공)`;
-      else msg = `🧢 ${P.name}: 팔을 휙 휘둘러 던져요! (높이·방향으로 코스가 바뀌어요)`;
+      else msg = performance.now() - (P.raisedAt ?? -1e9) < 1200 ? `🧢 ${P.name}: 좋아요! 이제 앞으로 휙 내리면서 던져요!` : `🧢 ${P.name}: 공 든 손을 머리 위로 들었다가 앞으로 휙!`;
       if (this.stateT > RULES.WINDUP_HINT_SEC) msg = `⏰ ${Math.ceil(RULES.WINDUP_AUTO_SEC - this.stateT)}초 뒤에 자동으로 살살 던져요`;
     } else if (this.state === 'windup' && P.cpu && !B.cpu) msg = `⚾ ${B.name} 준비! 🤖 컴퓨터가 던져요`;
     else if (this.state === 'pitch' && !B.cpu && !this.pitch?.swung) {
       if (this._isTouch(B)) msg = this._humans().length > 1 ? `⚾ ${B.name}: 공이 오면 내 쪽 화면을 톡! (옆으로 휙 = 세게)` : '⚾ 공이 오면 공 높이를 톡! (옆으로 휙 쓸면 세게)';
-      else msg = LEVELS[B.type].assist ? `⚾ ${B.name}: 공이 동그라미에 들어올 때 휘둘러요!` : `⚾ ${B.name}: 공이 오면 휘둘러요!`;
+      else msg = LEVELS[B.type].assist ? `⚾ ${B.name}: 공이 동그라미에 들어올 때 바깥에서 안쪽으로 휙!` : `⚾ ${B.name}: 손을 몸 바깥에 두고, 공이 오면 안쪽으로 휙!`;
     }
     const hudB = 10 * ui + 96 * ui;
     if (msg) this._pill(c, msg, this.W / 2, hudB + 34 * ui, 24 * ui);

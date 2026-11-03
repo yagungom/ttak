@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://*.supabase.co; worker-src 'self' blob:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#14284b">
   <meta name="mobile-web-app-capable" content="yes">
@@ -52,6 +52,9 @@
                 <button type="button" class="seg-btn" data-inn="2" role="radio">2회</button>
                 <button type="button" class="seg-btn" data-inn="3" role="radio">3회</button>
               </div>
+              <label for="team" class="lbl">🏆 팀 이름 <small>(랭킹용 · 실명 대신 별명)</small></label>
+              <input id="team" class="tn-name tn-team" maxlength="12" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="예: 튼튼이네 가족" aria-describedby="team-err" enterkeyhint="done">
+              <div id="team-err" class="err" aria-live="polite"></div>
               <div class="lbl" id="facing-lbl">카메라</div>
               <div class="seg seg-sm" id="facing-row" role="radiogroup" aria-label="카메라">
                 <button type="button" class="seg-btn" data-facing="environment" role="radio">📷 후면</button>
@@ -59,6 +62,7 @@
               </div>
               <button type="button" class="btn btn-primary btn-big" id="btn-start">플레이 볼!</button>
               <div class="row">
+                <button type="button" class="btn btn-sm" id="btn-rank">🏆 랭킹</button>
                 <button type="button" class="btn btn-sm" id="btn-help">❓ 하는 법</button>
                 <button type="button" class="btn btn-sm" id="btn-settings">⚙️ 설정</button>
               </div>
@@ -73,7 +77,7 @@
               </div>
             </div>
           </div>
-          <p class="privacy tn-privacy">🔒 카메라 영상은 이 기기 안에서만 처리돼요. 저장도 전송도 하지 않아요.</p>
+          <p class="privacy tn-privacy">🔒 카메라 영상은 이 기기 안에서만 처리돼요 (저장·전송 없음) · 랭킹에는 팀 이름·선수 이름·거리만 올라가요</p>
         </div>
       </section>
 
@@ -135,10 +139,31 @@
           <div class="tn-res-title" id="res-title"></div>
           <div class="tn-res-score"><span id="res-name0"></span><b id="res-score"></b><span id="res-name1"></span></div>
           <div class="tn-res-stats" id="res-stats"></div>
+          <div class="res-online" id="res-online" aria-live="polite"></div>
           <div class="row">
             <button type="button" class="btn btn-primary" id="btn-retry">한 판 더!</button>
+            <button type="button" class="btn" id="btn-res-rank">🏆 랭킹</button>
             <button type="button" class="btn" id="btn-home">처음으로</button>
           </div>
+        </div>
+      </section>
+
+      <!-- 랭킹: 🏏 비거리(한 방) / 📏 총 비거리(회 수별) -->
+      <section id="scr-ranking" class="screen dim">
+        <div class="card rank-card">
+          <div class="rank-top">
+            <button type="button" class="btn btn-sm" id="rank-back">← 뒤로</button>
+            <h2>🏆 랭킹</h2>
+            <div class="tabs small" id="rank-scope"></div>
+          </div>
+          <div class="board-tabs">
+            <div class="tabs" id="rank-kind"></div>
+            <div class="tabs" id="rank-mode"></div>
+            <div class="tabs" id="rank-input"></div>
+            <div class="tabs" id="rank-inn"></div>
+            <div class="tabs" id="rank-period"></div>
+          </div>
+          <div id="rank-board" class="board"></div>
         </div>
       </section>
 
@@ -148,12 +173,13 @@
           <h2>이렇게 놀아요 ⚾</h2>
           <ol class="help-list">
             <li><b>📺 카메라 모드 (둘이)</b> 폰을 <b>가로</b>로 세워 TV에 미러링하고, 두 사람이 나란히 2~3걸음 뒤에 서요. 화면 <b>왼쪽 반</b>에 한 명, <b>오른쪽 반</b>에 한 명! 대기실에서 자기 앞 공을 <b>톡 친 손</b>이 던지고 치는 손이 돼요 (다른 손은 안 봐요).</li>
-            <li><b>🧢 던지기</b> 그 손으로 팔을 <b>휙</b> 휘둘러요. 빠르게 휘두를수록 빠른 공! 휘두르는 <b>방향(왼쪽·오른쪽)</b>과 <b>손 높이(높게·낮게)</b>로 공이 들어오는 곳이 바뀌어요. 공은 언제나 스트라이크존 안으로 들어가요.</li>
-            <li><b>⚾ 치기</b> 공이 홈에 올 때 맞춰 손을 <b>휙</b>! 세게 휘두를수록 멀리 가요. 일찍 치면 왼쪽(당겨치기), 늦게 치면 오른쪽(밀어치기). 어른은 손 높이도 공 높이에 맞춰야 멀리 가요 (낮으면 뜬공, 높으면 땅볼).</li>
+            <li><b>🧢 던지기</b> 그 손을 <b>머리 위로 들었다가</b> (작은 창의 점이 초록색이 되면 준비 OK) <b>앞으로 휙 내리면서</b> 던져요. 빠를수록 빠른 공! 내리는 <b>방향(왼쪽·오른쪽)</b>과 <b>손이 멈춘 높이</b>(가슴에서 멈추면 높은 공, 끝까지 내리면 낮은 공)로 코스가 바뀌어요. 옆으로 흔들거나 위로 올리는 건 던지기가 아니에요. 공은 언제나 스트라이크존 안으로 들어가요.</li>
+            <li><b>⚾ 치기</b> 손을 <b>몸 바깥쪽</b>(어깨 옆)에 두고 기다렸다가, 공이 홈에 올 때 <b>몸 앞을 가로질러 안쪽으로 휙</b>! 세게 휘두를수록 멀리 가요. 일찍 치면 왼쪽(당겨치기), 늦게 치면 오른쪽(밀어치기). 어른은 손 높이도 공 높이에 맞춰야 멀리 가요 (낮으면 뜬공, 높으면 땅볼). 안쪽에서 바깥으로 빼는 동작은 스윙이 아니에요.</li>
             <li><b>📏 점수</b> 수비는 없어요. 친 공은 무조건 안쪽으로 날아가고, <b>날아간 거리(m)</b>가 그대로 점수! 정한 회가 끝나면 거리 합계가 많은 쪽이 이겨요.</li>
             <li><b>❌ 아웃</b> 헛스윙이나 안 친 공(포수가 받은 공)이 합쳐서 <b>3개</b>면 아웃, <b>3아웃</b>이면 공수교대. 안타를 쳐도 스트라이크는 그대로라서, 3개가 될 때까지 계속 쳐서 거리를 모아요.</li>
             <li><b>🧒 어린이</b> 공이 느리게 오고, 동그라미가 작아질 때 휘두르면 돼요. 높이는 거의 상관없어요. 던질 때도 대충 던져도 가운데로 들어가요.</li>
             <li><b>📱 폰 모드</b> 던질 곳을 손가락으로 누르고 <b>휙</b> 쓸면 던져요 (빠를수록 빠른 공). 공이 오면 공 높이를 <b>톡</b>(옆으로 휙 쓸면 더 세게). 혼자면 상대는 🤖 컴퓨터, 둘이면 화면 왼쪽 반 / 오른쪽 반을 각자 써요.</li>
+            <li><b>🏆 랭킹</b> 시작 화면에서 <b>팀 이름</b>(실명 대신 별명)을 쓰면 경기가 끝날 때 선수마다 기록돼요. 🏏 <b>비거리</b>(한 방 최고)와 📏 <b>총 비거리</b>(한 경기 합계, 1·2·3회 따로)를 어른/어린이, 카메라/폰, 오늘·이번 주·이번 달로 나눠 보여 줘요.</li>
             <li><b>🙈 잠깐!</b> 카메라 모드에서 한 사람이라도 안 보이면 자동으로 멈추고, 다시 서면 이어서 해요.</li>
           </ol>
           <button type="button" class="btn btn-primary" id="help-back">알았어요!</button>
@@ -171,7 +197,9 @@
           <div class="set-row"><label for="set-quality">인식 화질</label><select id="set-quality"></select></div>
           <div class="set-row"><label for="set-debug">성능 정보 표시</label><input type="checkbox" id="set-debug" class="toggle"></div>
           <div class="row"><button type="button" class="btn btn-primary" id="settings-back">닫기</button></div>
-          <p class="privacy small">🔒 카메라 영상: 이 기기에서만 처리, 저장·전송 없음 · 이름·설정은 이 기기에만 저장 · 서버로 보내는 정보 없음</p>
+          <p class="privacy small">🔒 카메라 영상: 이 기기에서만 처리, 저장·전송 없음 · 온라인 랭킹에 올라가는 것: 팀 이름, 선수 이름, 선수 종류(어른/어린이), 방식(카메라/폰), 회 수, 친 공 거리들 · 도배 방지용 접속 IP는 알아볼 수 없게 바꿔 2일만 보관 · 로그인·이메일·연락처 수집 안 함 · 설정·기록은 이 기기에도 저장</p>
+          <div class="set-row"><span>온라인 랭킹</span><b id="set-online"></b></div>
+          <div class="set-row"><span>이 기기 기록 지우기</span><button type="button" class="btn btn-sm" id="btn-clear-local">지우기</button></div>
         </div>
       </section>
 

@@ -1,5 +1,9 @@
 // 딱! 홈런 — 화면 흐름 담당
-import { $, $$, store } from './util.js';
+import { $, $$, store, el, formatNum } from './util.js';
+import { validateName, validatePlayer } from './nickname.js';
+import { addLocal, localBoard, normalizeOnline, clearLocal } from './ranking.js';
+import { online, errorText } from './api.js';
+import { renderBoard } from './chart.js';
 import * as fs from './fullscreen.js';
 import { BaseballEngine } from './game.js';
 import { BallSound } from './sound.js';
@@ -15,7 +19,7 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 // ── 설정 (이 기기에만 저장) ──
 const DEFAULTS = {
-  play: 'camera', names: ['', ''], types: ['adult', 'kid'], innings: RULES.DEFAULT_INNINGS,
+  play: 'camera', names: ['', ''], types: ['adult', 'kid'], innings: RULES.DEFAULT_INNINGS, team: '',
   facing: 'environment', cameraId: '', mirror: true, sfx: true, bgm: true, quality: 'high', debug: false, lag: 'normal',
 };
 const settings = { ...DEFAULTS, ...store.get('ttak.settings.v1', {}) };
@@ -61,6 +65,7 @@ function renderSetup() {
     $$(`.seg[data-side="${s}"] .seg-btn`).forEach((b) => b.setAttribute('aria-checked', String(b.dataset.type === types[s])));
   }
   $$('#inn-row .seg-btn').forEach((b) => b.setAttribute('aria-checked', String(Number(b.dataset.inn) === settings.innings)));
+  $('#team').value = settings.team || '';
   $$('#play-row .seg-btn').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.play === settings.play)));
   $$('#facing-row .seg-btn').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.facing === settings.facing)));
   const cam = needsCamera();
@@ -68,6 +73,8 @@ function renderSetup() {
   $('#btn-start').textContent = hasHuman() ? '플레이 볼!' : '🤖 컴퓨터끼리 구경하기';
   applyLayout();
 }
+$('#team').addEventListener('input', () => { $('#team-err').textContent = ''; });
+$('#team').addEventListener('change', (e) => { settings.team = e.target.value.trim().slice(0, 12); saveSettings(); });
 for (let s = 0; s < 2; s++) {
   $$(`.seg[data-side="${s}"] .seg-btn`).forEach((b) => b.addEventListener('click', () => { settings.types[s] = b.dataset.type; saveSettings(); renderSetup(); }));
   $(`#name${s}`).addEventListener('change', (e) => { settings.names[s] = e.target.value.trim().slice(0, 6); saveSettings(); });
@@ -114,14 +121,30 @@ function goTitle() {
 
 $('#btn-start').addEventListener('click', () => startGame());
 
+// 랭킹용 이름 확인: 팀 이름(비우면 '우리 가족')·선수 이름 (다른 게임과 같은 규칙)
+let team = '';
+const SIDE_NAME = ['왼쪽', '오른쪽'];
+function readNames() {
+  const v = validateName($('#team').value.trim() || '우리 가족');
+  if (!v.ok) { $('#team-err').textContent = v.reason; $('#team').focus(); return false; }
+  for (let s = 0; s < 2; s++) {
+    if (playTypes()[s] === 'cpu') continue;
+    const pv = validatePlayer(cleanName(settings.names[s], s));
+    if (!pv.ok) { $('#team-err').textContent = `${SIDE_NAME[s]} 선수: ${pv.reason}`; $(`#name${s}`).focus(); return false; }
+  }
+  team = v.name; settings.team = $('#team').value.trim(); $('#team-err').textContent = '';
+  return true;
+}
+
 async function startGame() {
   for (let s = 0; s < 2; s++) settings.names[s] = $(`#name${s}`).value.trim().slice(0, 6);
+  if (!readNames()) return;
   saveSettings();
   sound.unlock();
   enterFullscreen();
   requestWake();
   engine.stop();
-  engine.setPlayers(playTypes().map((type, s) => ({ type, name: cleanName(settings.names[s], s) })));
+  engine.setPlayers(playTypes().map((type, s) => ({ type, name: type === 'cpu' ? '컴퓨터' : cleanName(settings.names[s], s) })));
   engine.setInnings(settings.innings);
   if (!needsCamera()) {
     if (vision) vision.stopCamera();
@@ -209,9 +232,42 @@ $('#btn-cam-switch').addEventListener('click', async () => {
 });
 
 // ── 경기 ──
-engine.on('countdown', () => { show('play'); sound.startBgm(5, 116); });
+// 온라인 랭킹: 경기 시작(3·2·1) 때 사람 선수마다 1회용 세션을 받아 둠 (서버 시계로 경기 시간 확인)
+let sessions = [null, null];
+engine.on('countdown', () => {
+  show('play'); sound.startBgm(5, 116);
+  const input = engine.touchMode ? 'touch' : 'camera';
+  sessions = engine.players.map((p) => (online.enabled && !p.cpu
+    ? online.startSession({ mode: p.type, team, player: p.name, input, innings: engine.innings }).then((id) => ({ id }), (err) => ({ err }))
+    : null));
+});
+
+// 경기 끝: 사람 선수마다 이 기기에 기록 + 온라인 등록 (🏏 비거리 · 📏 총 비거리)
+let lastResult = null;
+async function recordResult(r) {
+  const humans = r.players.filter((p) => !p.cpu);
+  lastResult = { team, input: r.input, innings: r.innings, players: humans };
+  const note = $('#res-online'); note.className = 'res-online';
+  if (!humans.length) { note.textContent = ''; return; }
+  for (const p of humans) addLocal({ team, player: p.name, mode: p.type, input: r.input, innings: r.innings, total: p.total, best: p.best, hits: p.hits, homers: p.homers });
+  if (!online.enabled) { note.textContent = '💾 이 기기에 기록했어요'; return; }
+  note.textContent = '🌐 온라인 랭킹에 등록하는 중…';
+  const lines = await Promise.all(humans.map(async (p) => {
+    try {
+      const s = await sessions[p.side];
+      if (!s || s.err) throw s?.err || new Error('offline');
+      const res = await online.submit(s.id, { total: p.total, best: p.best, homers: p.homers, log: p.log });
+      if (res?.ok) return { ok: true, text: `🎉 ${p.name}: 오늘 🏏 비거리 ${formatNum(res.best_rank)}등 · 📏 총 비거리 ${formatNum(res.total_rank)}등` };
+      return { ok: false, text: `💾 ${p.name}: 이 기기에만 기록 · ${errorText(res?.reason)}` };
+    } catch (e) { return { ok: false, text: `💾 ${p.name}: 이 기기에만 기록 · ${errorText(e?.code || e?.message)}` }; }
+  }));
+  note.textContent = lines.map((l) => l.text).join('\n');
+  if (lines.every((l) => l.ok)) note.classList.add('good');
+}
+
 engine.on('over', (r) => {
   sound.stopBgm();
+  recordResult(r);
   $('#res-title').textContent = r.winner < 0 ? '🤝 무승부!' : `🏆 ${r.names[r.winner]} 승리!`;
   $('#res-name0').textContent = r.names[0];
   $('#res-name1').textContent = r.names[1];
@@ -234,6 +290,68 @@ document.addEventListener('visibilitychange', () => {
   else if (engine.input) requestWake();
 });
 
+// ── 랭킹 화면 ──
+const KINDS = [{ value: 'best', label: '🏏 비거리' }, { value: 'total', label: '📏 총 비거리' }];
+const MODES = [{ value: 'adult', label: '🧑 어른' }, { value: 'kid', label: '🧒 어린이' }];
+const INPUTS = [{ value: 'camera', label: '📺 카메라' }, { value: 'touch', label: '📱 폰' }];
+const INNS = RULES.INNINGS.map((n) => ({ value: n, label: `${n}회 경기` }));
+const PERIODS = [{ value: 'day', label: '오늘' }, { value: 'week', label: '이번 주' }, { value: 'month', label: '이번 달' }];
+const scopes = () => [
+  { value: 'online', label: online.enabled ? '🌐 전체' : '🌐 전체 (준비 중)', disabled: !online.enabled },
+  { value: 'local', label: '🏠 우리 기기' },
+];
+function makeTabs(box, items, current, onChange) {
+  box.replaceChildren();
+  box.setAttribute('role', 'tablist');
+  for (const it of items) {
+    box.append(el('button', {
+      type: 'button', class: 'tab', role: 'tab', 'aria-selected': String(it.value === current), disabled: it.disabled || null, text: it.label,
+      onclick: () => { if (!it.disabled && it.value !== current) onChange(it.value); },
+    }));
+  }
+}
+const rank = { kind: 'best', mode: 'adult', input: 'camera', innings: RULES.DEFAULT_INNINGS, period: 'day', scope: 'local', from: 'title' };
+function openRanking(from) {
+  rank.from = from;
+  const lr = lastResult;
+  rank.input = lr?.input || (settings.play === 'touch' ? 'touch' : 'camera');
+  rank.innings = lr?.innings || settings.innings;
+  rank.mode = lr?.players?.[0]?.type || (playTypes().find((t) => t !== 'cpu') || 'adult');
+  rank.scope = online.enabled ? 'online' : 'local';
+  show('ranking');
+  renderRanking();
+}
+// 방금 경기에서 이 판(종류·방식·회 수)에 맞는 내 기록
+function mine() {
+  const lr = lastResult;
+  if (!lr || lr.input !== rank.input || (rank.kind === 'total' && lr.innings !== rank.innings)) return null;
+  const p = lr.players.find((x) => x.type === rank.mode);
+  return p ? { score: rank.kind === 'best' ? p.best : p.total, player: p.name, team: lr.team } : null;
+}
+let boardToken = 0;
+async function renderRanking() {
+  makeTabs($('#rank-kind'), KINDS, rank.kind, (v) => { rank.kind = v; renderRanking(); });
+  makeTabs($('#rank-mode'), MODES, rank.mode, (v) => { rank.mode = v; renderRanking(); });
+  makeTabs($('#rank-input'), INPUTS, rank.input, (v) => { rank.input = v; renderRanking(); });
+  makeTabs($('#rank-inn'), INNS, rank.innings, (v) => { rank.innings = v; renderRanking(); });
+  $('#rank-inn').hidden = rank.kind !== 'total';     // 비거리(한 방)는 회 수와 상관없음
+  makeTabs($('#rank-period'), PERIODS, rank.period, (v) => { rank.period = v; renderRanking(); });
+  makeTabs($('#rank-scope'), scopes(), rank.scope, (v) => { rank.scope = v; renderRanking(); });
+  const box = $('#rank-board'), token = ++boardToken, me = mine();
+  const q = { kind: rank.kind, mode: rank.mode, period: rank.period, myScore: me?.score ?? null, input: rank.input, innings: rank.innings };
+  box.replaceChildren(el('div', { class: 'board-note', text: '불러오는 중…' }));
+  let board;
+  if (rank.scope === 'online') {
+    try { board = normalizeOnline(await online.board(q)); }
+    catch (e) { if (token === boardToken) box.replaceChildren(el('div', { class: 'board-note', text: errorText(e?.code || e?.message) })); return; }
+  } else board = localBoard(q);
+  if (token !== boardToken) return;
+  renderBoard(box, board, { myScore: me?.score ?? null, myTeam: me?.team || team || null, myPlayer: me?.player || null, kind: rank.kind, scopeLabel: rank.scope === 'online' ? '전체' : '우리 기기' });
+}
+$('#btn-rank').addEventListener('click', () => openRanking('title'));
+$('#btn-res-rank').addEventListener('click', () => openRanking('result'));
+$('#rank-back').addEventListener('click', () => show(rank.from !== 'result' ? 'title' : engine.state === 'over' ? 'result' : 'play'));
+
 // ── 하는 법·설정 ──
 $('#btn-help').addEventListener('click', () => show('help'));
 $('#help-back').addEventListener('click', () => show('title'));
@@ -243,9 +361,16 @@ for (const [k, q] of Object.entries(DISPLAY_LAG)) { const o = document.createEle
 $('#btn-settings').addEventListener('click', () => {
   $('#set-mirror').checked = settings.mirror; $('#set-sfx').checked = settings.sfx; $('#set-bgm').checked = settings.bgm;
   $('#set-debug').checked = settings.debug; qSel.value = settings.quality; lagSel.value = settings.lag;
+  $('#set-online').textContent = online.enabled ? '켜짐 ✅' : '꺼짐 (config.js 설정 필요)';
+  $('#btn-clear-local').textContent = '지우기'; clearArmed = false;
   show('settings');
 });
 $('#settings-back').addEventListener('click', () => show('title'));
+let clearArmed = false;   // 두 번 눌러야 지워짐 (실수 방지)
+$('#btn-clear-local').addEventListener('click', (e) => {
+  if (!clearArmed) { clearArmed = true; e.target.textContent = '정말 지울까요? 한 번 더'; return; }
+  clearLocal(); clearArmed = false; e.target.textContent = '지웠어요 ✅';
+});
 $('#set-mirror').addEventListener('change', (e) => { settings.mirror = e.target.checked; saveSettings(); applySettings(); });
 $('#set-sfx').addEventListener('change', (e) => { settings.sfx = e.target.checked; saveSettings(); applySettings(); });
 $('#set-bgm').addEventListener('change', (e) => { settings.bgm = e.target.checked; saveSettings(); applySettings(); });
@@ -319,4 +444,4 @@ $('#rotate-dismiss').addEventListener('click', () => { rotateDismissed = true; c
 applySettings();
 renderFsButtons();
 goTitle();
-if (params.has('test')) window.__bb = { engine, settings, get vision() { return vision; }, show, startGame };
+if (params.has('test')) window.__bb = { engine, settings, get vision() { return vision; }, show, startGame, openRanking, get lastResult() { return lastResult; } };

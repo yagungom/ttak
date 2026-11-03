@@ -2,6 +2,14 @@
 //  딱! 홈런 설정 — 숫자만 바꿔서 규칙·난이도를 조절할 수 있어요
 // ─────────────────────────────────────────────────────────────
 
+// 온라인 랭킹 (Supabase) — 와르르 캐치·뻥! 승부차기와 같은 프로젝트. 둘 다 비워두면 "우리 기기 기록"만 동작합니다.
+// 키는 publishable(anon) 키: 원래 브라우저에 공개되는 값이고, 보안은 서버 쪽 RLS·검증 함수가 담당합니다.
+// ⚠ service_role / secret 키는 절대 넣지 마세요. 처음 한 번 supabase/schema.sql 을 SQL Editor 에서 실행해야 켜집니다.
+export const ONLINE = Object.freeze({
+  SUPABASE_URL: 'https://hofykldrsauhmwepehnf.supabase.co',
+  SUPABASE_KEY: 'sb_publishable_JzCBAjrAhOgG9ZOqKhwz4Q_92R80GrW',
+});
+
 // 사람 인식 엔진·모델 (이 폴더에 같이 들어 있어 외부 서버를 부르지 않습니다)
 export const PATHS = Object.freeze({
   BUNDLE: 'vendor/mediapipe/vision_bundle.mjs',
@@ -23,6 +31,7 @@ export const FIELD = Object.freeze({
   FENCE_CENTER: 112,       //            가운데
   FENCE_H: 3.2,
   FAIR_DEG: 41,            // 친 공은 무조건 이 각도 안(페어 지역)으로
+  MAX_DIST: 140,           // 한 방 최대 비거리(m) — 랭킹 서버도 145m 넘는 기록은 받지 않음
   GRAVITY: 9.8,
 });
 
