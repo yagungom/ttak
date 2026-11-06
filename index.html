@@ -17,6 +17,8 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="css/style.css">
   <script type="module" src="js/main.js"></script>
+  <!-- 방문 통계 (Vercel Web Analytics: 쿠키 없음, 같은 도메인에서만 불러옴) -->
+  <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
   <div id="stage">
@@ -200,7 +202,7 @@
           <div class="set-row"><label for="set-quality">인식 화질</label><select id="set-quality"></select></div>
           <div class="set-row"><label for="set-debug">성능 정보 표시</label><input type="checkbox" id="set-debug" class="toggle"></div>
           <div class="row"><button type="button" class="btn btn-primary" id="settings-back">닫기</button></div>
-          <p class="privacy small">🔒 카메라 영상: 이 기기에서만 처리, 저장·전송 없음 · 온라인 랭킹에 올라가는 것: 팀 이름, 선수 이름, 선수 종류(어른/어린이), 방식(카메라/폰), 회 수, 친 공 거리들 · 도배 방지용 접속 IP는 알아볼 수 없게 바꿔 2일만 보관 · 로그인·이메일·연락처 수집 안 함 · 설정·기록은 이 기기에도 저장</p>
+          <p class="privacy small">🔒 카메라 영상: 이 기기에서만 처리, 저장·전송 없음 · 온라인 랭킹에 올라가는 것: 팀 이름, 선수 이름, 선수 종류(어른/어린이), 방식(카메라/폰), 회 수, 친 공 거리들 · 도배 방지용 접속 IP는 알아볼 수 없게 바꿔 2일만 보관 · 방문 수는 쿠키 없는 익명 통계로만 집계(Vercel) · 로그인·이메일·연락처 수집 안 함 · 설정·기록은 이 기기에도 저장</p>
           <div class="set-row"><span>온라인 랭킹</span><b id="set-online"></b></div>
           <div class="set-row"><span>이 기기 기록 지우기</span><button type="button" class="btn btn-sm" id="btn-clear-local">지우기</button></div>
         </div>
